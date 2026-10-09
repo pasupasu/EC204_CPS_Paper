@@ -1,4 +1,3 @@
 # Project Description
 
 This project concerns the Empirical Project for EC 204, leveraging the IPUMS CPS dataset to test the potential validity of the health insurance job lock theory associated most with Madrian's 1994 QJE Paper (https://www.jstor.org/stable/2118427). The theory posits that because American health insurance is most commonly tied to employment, job mobility could be negatively impacted by coverage.
-

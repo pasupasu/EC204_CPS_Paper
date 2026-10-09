@@ -1,0 +1,200 @@
+----------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/pasutalur/Documents/EC204/EC204_CPS_Paper/logs/simple_linear.l
+> og
+  log type:  text
+ opened on:   9 Oct 2026, 10:11:36
+
+. 
+. local raw   "data/simple_linear_data_raw.dta"
+
+. local clean "data/simple_linear_data_clean.dta"
+
+. 
+. tempfile year_t1
+
+. 
+. *-------------------------------------------------------------------------------
+. * Year t+1 records: outcome side of the link
+. *-------------------------------------------------------------------------------
+. use cpsidp year mish age sex race numemps using "`raw'", clear
+
+. 
+. // Returning rotation groups are in months-in-sample 5-8 in their second ASEC
+. keep if inrange(mish, 5, 8) & cpsidp != 0
+(609,244 observations deleted)
+
+. 
+. // Shift year back so it lines up with the year t record
+. replace year = year - 1
+(612,343 real changes made)
+
+. 
+. rename (mish age sex race numemps) =_t1
+
+. save `year_t1'
+file /var/folders/bc/l31sgr_n5w5btyg2k_51wz700000gn/T//S_52554.000001 saved as
+    .dta format
+
+. 
+. *-------------------------------------------------------------------------------
+. * 2. Create x in year t
+. *-------------------------------------------------------------------------------
+. use "`raw'", clear
+
+. 
+. // OwnESI: 1 if GRPOWNLY is yes, 0 if no or not in universe
+. gen byte ownesi = (grpownly == 2)
+
+. label variable ownesi "Own employer-sponsored insurance (year t)"
+
+. 
+. *-------------------------------------------------------------------------------
+. * 3. Restrict the year t sample
+. *-------------------------------------------------------------------------------
+. // Men
+. keep if sex == 1
+(625,717 observations deleted)
+
+. 
+. // Married with spouse present in the household
+. keep if marst == 1
+(351,562 observations deleted)
+
+. 
+. // Aged 25-54
+. keep if inrange(age, 25, 54)
+(111,020 observations deleted)
+
+. 
+. // Wage & salary workers last year (not self-employed, not armed forces).
+. keep if inrange(classwly, 20, 28) & classwly != 26
+(22,315 observations deleted)
+
+. 
+. // Exactly one employer last year
+. keep if numemps == 1
+(10,599 observations deleted)
+
+. 
+. // Drop men covered as a dependent on someone else's employer plan
+. // and without a plan in their own name
+. drop if grpdeply == 2 & grpownly != 2
+(17,248 observations deleted)
+
+. 
+. // Incoming rotation groups (first ASEC) with a valid person identifier
+. keep if inrange(mish, 1, 4) & cpsidp != 0
+(41,722 observations deleted)
+
+. 
+. *-------------------------------------------------------------------------------
+. * 4. Link to year t+1
+. *-------------------------------------------------------------------------------
+. merge 1:1 cpsidp year using `year_t1', keep(match) nogenerate
+(label MISH already defined)
+(label AGE already defined)
+(label SEX already defined)
+(label RACE already defined)
+
+    Result                      Number of obs
+    -----------------------------------------
+    Not matched                             0
+    Matched                            17,190  
+    -----------------------------------------
+
+. 
+. // Validate the link: same sex and race, age rises by 0-2 years
+. keep if sex_t1 == sex & race_t1 == race
+(230 observations deleted)
+
+. keep if inrange(age_t1 - age, 0, 2)
+(225 observations deleted)
+
+. 
+. // Final check: make sure links are properly implemented
+. count if mish_t1 == mish + 4
+  15,874
+
+. keep if mish_t1 == mish + 4
+(861 observations deleted)
+
+. 
+. *-------------------------------------------------------------------------------
+. * 5. Create y from year t+1
+. *-------------------------------------------------------------------------------
+. // JobChange: 1 if two or more employers, 0 if exactly one
+. gen byte jobchange = .
+(15,874 missing values generated)
+
+. replace jobchange = 1 if numemps_t1 >= 2 & numemps_t1 < .
+(1,114 real changes made)
+
+. replace jobchange = 0 if numemps_t1 == 1
+(14,430 real changes made)
+
+. label variable jobchange "Two or more employers in year t+1"
+
+. 
+. // Men with no employer in year t+1 (NUMEMPS NIU) have no defined outcome
+. drop if missing(jobchange)
+(330 observations deleted)
+
+. 
+. // Scan results
+. tab year jobchange
+
+           | Two or more employers
+    survey |      in year t+1
+      year |         0          1 |     Total
+-----------+----------------------+----------
+      2019 |     2,462        212 |     2,674 
+      2020 |     2,178        176 |     2,354 
+      2021 |     2,074        160 |     2,234 
+      2022 |     2,052        162 |     2,214 
+      2023 |     2,020        146 |     2,166 
+      2024 |     1,954        135 |     2,089 
+      2025 |     1,690        123 |     1,813 
+-----------+----------------------+----------
+     Total |    14,430      1,114 |    15,544 
+
+. tab ownesi jobchange, row
+
++----------------+
+| Key            |
+|----------------|
+|   frequency    |
+| row percentage |
++----------------+
+
+       Own |
+employer-s |
+  ponsored | Two or more employers
+ insurance |      in year t+1
+  (year t) |         0          1 |     Total
+-----------+----------------------+----------
+         0 |     2,993        284 |     3,277 
+           |     91.33       8.67 |    100.00 
+-----------+----------------------+----------
+         1 |    11,437        830 |    12,267 
+           |     93.23       6.77 |    100.00 
+-----------+----------------------+----------
+     Total |    14,430      1,114 |    15,544 
+           |     92.83       7.17 |    100.00 
+
+. 
+. // Convert existing variables to ideal types before storing
+. compress
+  (0 bytes saved)
+
+. save "`clean'", replace
+file data/simple_linear_data_clean.dta saved
+
+. 
+. log close
+      name:  <unnamed>
+       log:  /Users/pasutalur/Documents/EC204/EC204_CPS_Paper/logs/simple_linear.l
+> og
+  log type:  text
+ closed on:   9 Oct 2026, 10:11:36
+----------------------------------------------------------------------------------
