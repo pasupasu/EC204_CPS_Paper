@@ -1,0 +1,251 @@
+-------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/pasutalur/Documents/EC204/EC204_CPS_Paper/logs/sl_quantitative.log
+  log type:  text
+ opened on:  10 Oct 2026, 15:21:34
+
+. 
+. local raw   "data/sl_quantitative_raw.dta"
+
+. local clean "data/sl_quantitative_clean.dta"
+
+. 
+. use "`raw'", clear
+
+. 
+. *-------------------------------------------------------------------------------
+. * 1. Restrict the sample
+. *-------------------------------------------------------------------------------
+. // Men
+. keep if sex == 1
+(625,717 observations deleted)
+
+. 
+. // Aged 26-64
+. keep if inrange(age, 26, 64)
+(305,759 observations deleted)
+
+. 
+. // Wage & salary workers last year (not self-employed, not armed forces).
+. keep if inrange(classwly, 20, 28) & classwly != 26
+(68,560 observations deleted)
+
+. 
+. // Employed at some point last year
+. keep if numemps != 0
+(0 observations deleted)
+
+. 
+. // Policyholders of their own employer coverage
+. keep if grpownly == 2
+(81,533 observations deleted)
+
+. 
+. // Keep each person's first appearance (people can be in two consecutive ASECs)
+. drop if cpsidp == 0
+(0 observations deleted)
+
+. isid cpsidp year
+
+. bysort cpsidp (year): keep if _n == 1
+(30,224 observations deleted)
+
+. isid cpsidp
+
+. 
+. *-------------------------------------------------------------------------------
+. * 2. Create y
+. *-------------------------------------------------------------------------------
+. // JobChange: 1 if two or more employers, 0 if exactly one
+. gen byte jobchange = .
+(109,794 missing values generated)
+
+. replace jobchange = 1 if numemps >= 2 & numemps < .
+(10,259 real changes made)
+
+. replace jobchange = 0 if numemps == 1
+(99,535 real changes made)
+
+. label variable jobchange "Two or more employers last year"
+
+. 
+. *-------------------------------------------------------------------------------
+. * 3. Create x
+. *-------------------------------------------------------------------------------
+. // Ensure that MOOP includes premiums (measured by HIPVAL) to adjust for
+. count if moop < hipval
+  0
+
+. assert r(N) == 0
+
+. 
+. // Medical spending net of premiums, in constant 1999 dollars
+. gen double medspend = (moop - hipval) * cpi99
+
+. label variable medspend "Family non-premium medical OOP spending (1999 $)"
+
+. 
+. // Check the distribution and zeroes for skewness
+. summarize medspend, detail
+
+      Family non-premium medical OOP spending (1999 $)
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%            0              0
+ 5%       19.692              0
+10%        70.84              0       Obs             109,794
+25%        260.8              0       Sum of wgt.     109,794
+
+50%       768.15                      Mean           1571.839
+                        Largest       Std. dev.      3411.485
+75%         1989       137585.8
+90%       3876.3       137852.9       Variance       1.16e+07
+95%         5470         517775       Skewness       69.84267
+99%        10242       524754.5       Kurtosis       9949.257
+
+. count if medspend == 0
+  4,351
+
+. tabstat medspend, statistics(p90 p95 p99 max) by(year)
+
+Summary for variables: medspend
+Group variable: year (survey year)
+
+    year |       p90       p95       p99       Max
+---------+----------------------------------------
+    2019 |      3978    5502.9   10077.6  137585.8
+    2020 |    4042.4    5672.4  10523.28     64548
+    2021 |    3735.2    5280.8   10239.6   80757.6
+    2022 |   3769.95    5350.5    9950.7  100921.5
+    2023 |    3698.5   5212.04     10242  109048.3
+    2024 |      3829   5497.35   9982.75     84785
+    2025 |    3876.3    5416.2   10726.2    112572
+    2026 |    4084.3    5583.6  10417.55  524754.5
+---------+----------------------------------------
+   Total |    3876.3      5470     10242  524754.5
+--------------------------------------------------
+
+. 
+. // The top of the distribution is extreme (max is several hundred times the
+. // median), so cap at the 99th percentile.
+. _pctile medspend, percentiles(99)
+
+. local cap = r(r1)
+
+. display "99th percentile cap: " %9.2f `cap'
+99th percentile cap:  10242.00
+
+. count if medspend > `cap'
+  1,096
+
+. 
+. gen double medspend_cap = min(medspend, `cap')
+
+. label variable medspend_cap "Medical spending, capped at p99 (1999 $)"
+
+. 
+. // Version 1.a: thousands of dollars, uncapped
+. gen double medspend_k = medspend / 1000
+
+. label variable medspend_k "Medical spending (thousands of 1999 $)"
+
+. 
+. // Version 1.b: thousands of dollars, capped
+. gen double medspend_k_cap = medspend_cap / 1000
+
+. label variable medspend_k_cap "Medical spending, capped at p99 (thousands of 1999 $)"
+
+. 
+. // Version 2: log of one plus spending. The log already compresses the right
+. // tail, so it is built from the uncapped dollars.
+. gen double ln_medspend = ln(1 + medspend)
+
+. label variable ln_medspend "Log of one plus medical spending (1999 $)"
+
+. 
+. // Summarize results for each regressor
+. summarize medspend_k medspend_k_cap ln_medspend, detail
+
+           Medical spending (thousands of 1999 $)
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%            0              0
+ 5%      .019692              0
+10%       .07084              0       Obs             109,794
+25%        .2608              0       Sum of wgt.     109,794
+
+50%       .76815                      Mean           1.571839
+                        Largest       Std. dev.      3.411485
+75%        1.989       137.5858
+90%       3.8763       137.8529       Variance       11.63823
+95%         5.47        517.775       Skewness       69.84267
+99%       10.242       524.7545       Kurtosis       9949.257
+
+     Medical spending, capped at p99 (thousands of 1999
+                             $)
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%            0              0
+ 5%      .019692              0
+10%       .07084              0       Obs             109,794
+25%        .2608              0       Sum of wgt.     109,794
+
+50%       .76815                      Mean           1.496529
+                        Largest       Std. dev.      1.899578
+75%        1.989         10.242
+90%       3.8763         10.242       Variance       3.608395
+95%         5.47         10.242       Skewness       2.275246
+99%       10.242         10.242       Kurtosis       8.908145
+
+          Log of one plus medical spending (1999 $)
+-------------------------------------------------------------
+      Percentiles      Smallest
+ 1%            0              0
+ 5%     3.029747              0
+10%     4.274441              0       Obs             109,794
+25%     5.567581              0       Sum of wgt.     109,794
+
+50%     6.645286                      Mean           6.344412
+                        Largest       Std. dev.      1.871686
+75%      7.59589       11.83201
+90%     8.262894       11.83395       Variance       3.503208
+95%     8.607217        13.1573       Skewness      -1.493757
+99%      9.23435       13.17069       Kurtosis       6.081775
+
+. 
+. // Summarize results for each regressor, ordered by jobchange
+. tabstat medspend_k medspend_k_cap ln_medspend, statistics(n mean sd) by(jobchange)
+
+Summary statistics: N, Mean, SD
+Group variable: jobchange (Two or more employers last year)
+
+jobchange |  medspe~k  me~k_cap  ln_med~d
+----------+------------------------------
+        0 |     99535     99535     99535
+          |  1.562922  1.490624   6.34335
+          |  3.095527  1.890502  1.868443
+----------+------------------------------
+        1 |     10259     10259     10259
+          |  1.658358  1.553816  6.354716
+          |  5.619616  1.984661  1.902919
+----------+------------------------------
+    Total |    109794    109794    109794
+          |  1.571839  1.496529  6.344412
+          |  3.411485  1.899578  1.871686
+-----------------------------------------
+
+. 
+. // Convert existing variables to ideal types before storing
+. compress
+  (0 bytes saved)
+
+. save "`clean'", replace
+file data/sl_quantitative_clean.dta saved
+
+. 
+. log close
+      name:  <unnamed>
+       log:  /Users/pasutalur/Documents/EC204/EC204_CPS_Paper/logs/sl_quantitative.log
+  log type:  text
+ closed on:  10 Oct 2026, 15:21:35
+-------------------------------------------------------------------------------------------------------------------
